@@ -6,11 +6,10 @@ Kevin Oktoaria | 5027201046
 Najwa Amelia Qorry 'Aina | 5027201001
 
 ## Soal 1
-Loid bersama Franky berencana membuat peta tersebut dengan kriteria WISE sebagai DNS Server, Westalis sebagai DHCP Server, Berlint sebagai Proxy Server (1).
+Loid bersama Franky berencana membuat peta tersebut dengan kriteria WISE sebagai DNS Server, Westalis sebagai DHCP Server, Berlint sebagai Proxy Server (1)
 
 ### Jawab
 Pertama-tama kita perlu membuat Topologi sesuai soal, Topologi yang telah kami buat adalah sebagai berikut:
-
 ![Foto](./img/1a.PNG)
 
 Setelah itu kita perlu melakukan konfigurasi pada setiap node, berikut adalah konfigurasi setiap node:
@@ -103,6 +102,7 @@ apt-get install libapache2-mod-php7.0 -y
 apt-get install squid -y
 ```
 
+
 ## Soal 2
 Ostania sebagai DHCP Relay (2)
 
@@ -113,6 +113,159 @@ apt-get update
 iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE -s 192.212.0.0/16
 apt-get install isc-dhcp-relay -y
 ```
+Dalam proses download dhcp-relay, IP Westalis (192.217.2.4) sebagai dhcp-server dan interfaces akan listen to eth1 eth2 eth3 seperti gambar berikut:
+![Foto](./img/2a.PNG)
+
+
+## Soal 3
+Client yang melalui Switch1 mendapatkan range IP dari [prefix IP].1.50 - [prefix IP].1.88 dan [prefix IP].1.120 - [prefix IP].1.155 (3)
+
+### Jawab
+Pertama, perlu dilakukan konfigurasi pada Ostania sebagai DHCP Relay dengan melakukan edit file /etc/default/isc-dhcp-relay dengan konfigurasi berikut
+
+```
+# What servers should the DHCP relay forward requests to?
+SERVERS=\"192.212.2.4\"
+# On what interfaces should the DHCP relay (dhrelay) serve DHCP requests?
+INTERFACES=\"eth1 eth3 eth2\"
+# Additional options that are passed to the DHCP relay daemon?
+OPTIONS=\"\"
+```
+
+Selanjutnya pada Westalis sebagai DHCP Server, dilakukan konfigurasi pada file /etc/default/isc-dhcp-server sebagai berikut:
+
+```
+# On what interfaces should the DHCP server (dhcpd) serve DHCP requests?
+#       Separate multiple interfaces with spaces, e.g. \"eth0 eth1\".
+INTERFACES=\"eth0\"
+```
+
+Kemudian dilakukan restart DHCP server dengan `service isc-dhcp-server restart`. Setelah itu dilakukan konfigurasi untuk rentang IP yang akan diberikan pada file /etc/dhcp/dhcpd.conf dengan menulis seperti dibawah ini:
+
+```
+subnet 192.212.2.0 netmask 255.255.255.0 {
+}
+subnet 192.212.1.0 netmask 255.255.255.0 {
+    range  192.212.1.50 192.212.1.88;
+    range  192.212.1.120 192.212.1.155;
+    option routers 192.212.1.1;
+    option broadcast-address 192.212.1.255;
+    option domain-name-servers 192.212.2.2;
+    default-lease-time 300;
+    max-lease-time 6900;
+}
+
+## Soal 4
+Client yang melalui Switch3 mendapatkan range IP dari [prefix IP].3.10 - [prefix IP].3.30 dan [prefix IP].3.60 - [prefix IP].3.85 (4)
+
+### Jawab
+Sama seperti sebelumnya, tambahkan konfigurasi untuk rentang IP yang akan diberikan pada file /etc/dhcp/dhcpd.conf dengan konfigurasi pada berikut ini:
+
+```
+subnet 192.212.3.0 netmask 255.255.255.0 {
+    range  192.212.3.60 192.212.3.85;
+    option routers 192.212.3.1;
+    option broadcast-address 192.212.3.255;
+    option domain-name-servers 192.212.2.2;
+    default-lease-time 600;
+    max-lease-time 6900;
+}
+```
+
+## Soal 5
+Client mendapatkan DNS dari WISE dan client dapat terhubung dengan internet melalui DNS tersebut. (5)
+
+### Jawab
+Agar client mendapatkan DNS dari WISE, dilakukan konfigurasi pada file /etc/dhcp/dhcpd.conf dengan option domain-name-servers 192.212.2.2;
+
+Selanjutnya agar client terhubung ke internet, dilakukan konfigurasi pada file /etc/bind/named.conf.options sebagai berikut
+```
+options {
+        directory \"/var/cache/bind\";
+        forwarders {
+                192.168.122.1;
+        };
+        // dnssec-validation auto;
+        allow-query { any; };
+        auth-nxdomain no;
+        listen-on-v6 { any; };
+};
+" > /etc/bind/named.conf.options
+service bind9 restart
+```
+
+#### Testing
+Berhasil mencoba ping ke `google.com` pada client yang menunjukkan telah terhubung ke internet
+SSS
+![Foto](./img/5a.PNG)
+
+Garden
+![Foto](./img/5b.PNG)
+
+Eden
+![Foto](./img/5c.PNG)
+
+NewstonCastle
+![Foto](./img/5d.PNG)
+
+KemonoPark
+![Foto](./img/5e.PNG)
+
+## Soal 6
+Lama waktu DHCP server meminjamkan alamat IP kepada Client yang melalui Switch1 selama 5 menit sedangkan pada client yang melalui Switch3 selama 10 menit. Dengan waktu maksimal yang dialokasikan untuk peminjaman alamat IP selama 115 menit. (6)
+
+### Jawab
+Dilakukan konfigurasi untuk mengatur lama waktu DHCP server meminjamkan alamat IP kepada Client pada subnet interfase Switch1 dan Switch3 dalam file /etc/dhcp/dhcpd.conf seperti berikut:
+```
+subnet 192.212.1.0 netmask 255.255.255.0 {
+    ...
+    default-lease-time 300; # 5 menit
+    max-lease-time 6900; # 115 menit
+    ...
+}
+subnet 192.212.3.0 netmask 255.255.255.0 {
+    ...
+    default-lease-time 600; # 10 menit
+    max-lease-time 6900; # 115 menit
+    ...
+}
+```
+
+#### Testing
+Terlihat pada client telah menunjukkan lease time-nya sesuai dengan konfigurasi yang diminta
+SSS (Switch1)
+![Foto](./img/6a.PNG)
+
+Eden (Switch3)
+![Foto](./img/6b.PNG)
+
+
+## Soal 7
+Loid dan Franky berencana menjadikan Eden sebagai server untuk pertukaran informasi dengan alamat IP yang tetap dengan IP [prefix IP].3.13 (7)
+
+### Jawab
+Dilakukan konfigurasi untuk alamat IP yang tetap (fixed address) pada file /etc/dhcp/dhcpd.conf seperti berikut:
+```
+host Eden {
+    hardware ethernet 36:2e:46:e7:f6:90;
+    fixed-address 192.212.3.13;
+}
+" >  /etc/dhcp/dhcpd.conf
+```
+
+Kemudian juga settingan konfigurasi network interface pada Eden juga disesuaikan seperti berikut:
+```
+auto eth0
+iface eth0 inet dhcp
+hwaddress ether 36:2e:46:e7:f6:90
+```
+
+#### Testing
+Terlihat pada Eden telah mendapat alamat IP yang tetap atau fixed address `192.212.3.13` sesuai dengan konfigurasi yang diminta
+Eden
+![Foto](./img/7a.PNG)
+
+![Foto](./img/7b.PNG)
 
 ## Soal 3
 Semua client yang ada HARUS menggunakan konfigurasi IP dari DHCP Server. Client yang melalui Switch1 mendapatkan range IP dari [prefix IP].1.50 - [prefix IP].1.88 dan [prefix IP].1.120 - [prefix IP].1.155 (3)
